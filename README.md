@@ -16,7 +16,7 @@ $ python3 DHT.py
 ```
 example (put and get objects from the DHT):
 ```console
-$ python3 example.py
+$ python3 DHTClient.py
 ```
 
 ## References
