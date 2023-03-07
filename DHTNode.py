@@ -11,6 +11,9 @@ class FingerTable:
 
     def __init__(self, node_id, node_addr, m_bits=10):
         """ Initialize Finger Table."""
+        self.node_id = node_id
+        self.node_addr = node_addr 
+        self.m_bits = m_bits
         pass
 
     def fill(self, node_id, node_addr):
@@ -134,6 +137,8 @@ class DHTNode(threading.Thread):
 
         self.logger.debug("Get successor: %s", args)
         #TODO Implement processing of SUCCESSOR message
+        
+          
         pass
                 
     def notify(self, args):
@@ -188,9 +193,15 @@ class DHTNode(threading.Thread):
         self.logger.debug("Put: %s %s", key, key_hash)
 
         #TODO Replace next code:
-        self.send(address, {"method": "NACK"})
-
-
+        #print(self.successor_id, key_hash, self.identification)
+        #if self.successor_id > key_hash and self.identification < key_hash:
+        if contains(self.identification, self.successor_id, key_hash):
+            self.send(address, {"method": "ACK"})
+        else:
+            self.send(address, {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
+        
+        
+        
     def get(self, key, address):
         """Retrieve value from DHT.
 
@@ -202,7 +213,8 @@ class DHTNode(threading.Thread):
         self.logger.debug("Get: %s %s", key, key_hash)
 
         #TODO Replace next code:
-        self.send(address, {"method": "NACK"})
+        #self.send(address, {"method": "GET", "args": {"key": key, "from": address}})
+        #self.send(address, {"method": "ACK", "args": value})
 
 
     def run(self):
