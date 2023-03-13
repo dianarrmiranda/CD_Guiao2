@@ -137,15 +137,6 @@ class DHTNode(threading.Thread):
 
         self.logger.debug("Get successor: %s", args)
         #TODO Implement processing of SUCCESSOR message
-        #Verifica se o nó sucessor é ele proprio
-        if self.successor_id == self.identification:
-            return self
-        
-        #Verifica se o ID procurado está entre o nó e o sucessor
-        if self.identification < args['id'] <= self.successor_id:
-            return self.successor_id, self.successor_addr
-        
-        pass
                 
     def notify(self, args):
         """Process NOTIFY message.
@@ -199,11 +190,13 @@ class DHTNode(threading.Thread):
         self.logger.debug("Put: %s %s", key, key_hash)
 
         #TODO Replace next code:
-        
-        #Coloca o valor na tabela
-        self.keystore[key_hash] = value
-        #Envia o Acnowledge
-        self.send(address, {"method": "ACK"})
+        if contains(self.identification, self.successor_id, key_hash):
+            #Coloca o valor na tabela
+            self.keystore[key_hash] = value
+            #Envia o Acnowledge
+            self.send(address, {"method": "ACK"})
+        else:
+            self.send(self.successor_addr, {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
         
         
         
@@ -219,14 +212,17 @@ class DHTNode(threading.Thread):
 
         #TODO Replace next code:
         #self.send(address, {"method": "NACK"})
-        
-        #Vai buscar o valor à tabela
-        value = self.keystore.get(key_hash)
-        #Verifica se o valor existe e envia o Acnowledge
-        if value is not None:
-            self.send(address, {"method": "ACK", "args": value})
+
+        if  contains(self.identification, self.successor_id, key_hash):
+            if key_hash in self.keystore:
+                #Vai buscar o valor à tabela
+                value = self.keystore.get(key_hash)
+                #Verifica se o valor existe e envia o Acnowledge
+                self.send(address, {"method": "ACK", "args": value})
+            else:
+                self.send(address, {"method": "NACK"})
         else:
-            self.send(address, {"method": "NACK"})
+            self.send(self.successor_addr, {"method": "GET", "args": {"key": key, "from": address}})
 
 
     def run(self):
