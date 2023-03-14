@@ -201,7 +201,7 @@ class DHTNode(threading.Thread):
         self.logger.debug("Put: %s %s", key, key_hash)
 
         #TODO Replace next code:
-        if contains(self.predecessor_id, self.identification, key_hash):
+        if contains(self.identification, self.successor_id, key_hash):
             #Coloca o valor na tabela
             self.keystore[key] = value
             #Envia o Acnowledge
@@ -224,7 +224,7 @@ class DHTNode(threading.Thread):
         #TODO Replace next code:
         #self.send(address, {"method": "NACK"})
 
-        if contains(self.predecessor_id, self.identification, key_hash):
+        if contains(self.identification, self.successor_id, key_hash):
             if key in self.keystore:
                 #Vai buscar o valor à tabela
                 value = self.keystore.get(key)
