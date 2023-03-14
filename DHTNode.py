@@ -3,6 +3,7 @@ import socket
 import threading
 import logging
 import pickle
+import math
 from utils import dht_hash, contains
 
 
@@ -14,14 +15,17 @@ class FingerTable:
         self.node_id = node_id
         self.node_addr = node_addr 
         self.m_bits = m_bits
+        self.fingerTable = []
         pass
 
     def fill(self, node_id, node_addr):
         """ Fill all entries of finger_table with node_id, node_addr."""
+        self.fingerTable = [(i, (node_id, node_addr)) for i, _ in self.fingerTable]
         pass
 
     def update(self, index, node_id, node_addr):
         """Update index of table with node_id and node_addr."""
+        self.fingerTable = [(index, (node_id, node_addr))]
         pass
 
     def find(self, identification):
@@ -33,7 +37,8 @@ class FingerTable:
         pass
 
     def getIdxFromId(self, id):
-        pass
+        idx = math.sqrt(id - self.node_id) + 1
+        return idx
 
     def __repr__(self):
         pass
@@ -76,7 +81,6 @@ class DHTNode(threading.Thread):
             self.predecessor_addr = None
 
         self.finger_table = None    #TODO create finger_table
-
         self.keystore = {}  # Where all data is stored
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.settimeout(timeout)
@@ -135,9 +139,16 @@ class DHTNode(threading.Thread):
             args (dict): addr and id of the node asking
         """
 
-        self.logger.debug("Get successor: %s", args)
+        self.logger.debug("Get successor: %s", args)   
         #TODO Implement processing of SUCCESSOR message
-                
+        id = args["id"]
+        addr = args["from"]
+        if contains(self.predecessor_id, self.identification, id):
+            self.send(self.successor_addr, {"method": "SUCESSOR_REP", "args": {"id": id, "sucessor_id": self.successor_id, "sucessor_addr" : self.successor_addr}})
+        else:
+            self.send(self.successor_addr, {"method": "SUCESSOR", "args": {"req_id": id, "from": addr}})
+            
+            
     def notify(self, args):
         """Process NOTIFY message.
             Updates predecessor pointers.
@@ -190,9 +201,9 @@ class DHTNode(threading.Thread):
         self.logger.debug("Put: %s %s", key, key_hash)
 
         #TODO Replace next code:
-        if contains(self.identification, self.successor_id, key_hash):
+        if contains(self.predecessor_id, self.identification, key_hash):
             #Coloca o valor na tabela
-            self.keystore[key_hash] = value
+            self.keystore[key] = value
             #Envia o Acnowledge
             self.send(address, {"method": "ACK"})
         else:
@@ -213,10 +224,10 @@ class DHTNode(threading.Thread):
         #TODO Replace next code:
         #self.send(address, {"method": "NACK"})
 
-        if  contains(self.identification, self.successor_id, key_hash):
-            if key_hash in self.keystore:
+        if contains(self.predecessor_id, self.identification, key_hash):
+            if key in self.keystore:
                 #Vai buscar o valor à tabela
-                value = self.keystore.get(key_hash)
+                value = self.keystore.get(key)
                 #Verifica se o valor existe e envia o Acnowledge
                 self.send(address, {"method": "ACK", "args": value})
             else:
