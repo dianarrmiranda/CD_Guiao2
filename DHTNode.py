@@ -25,36 +25,44 @@ class FingerTable:
 
     def update(self, index, node_id, node_addr):
         """Update index of table with node_id and node_addr."""
-        self.fingerTable = [(index, (node_id, node_addr))]
+        self.fingerTable[index-1] = (index, (node_id, node_addr))
         pass
 
     def find(self, identification):
         """ Get node address of closest preceding node (in finger table) of identification. """
-        pass
+        index = self.getIdxFromId(identification)
+
+        print(self.fingerTable)
+        return self.fingerTable[index-1][1][1]
+        
 
     def refresh(self):
         """ Retrieve finger table entries requiring refresh."""
-        pass
+        res = []
+        for i in range(self.m_bits):
+            node_addr = self.find(self.node_id + 2**i)
+            res.append((i+1, (self.node_id + 2**i) % 2**self.m_bits, node_addr))
+        return res
+
 
     def getIdxFromId(self, id):
-
         if id > self.node_id: # key menor que o 2^m_bits - 1
             idx = math.log2(id - self.node_id) + 1
         else:
             overlap_id = id + 2**self.m_bits
             idx = math.log2(overlap_id - self.node_id) + 1
-
-        return idx
+            
+        return int(idx)
 
     def __repr__(self):
-        pass
+        return str(self.fingerTable)
 
     @property
     def as_list(self):
         """return the finger table as a list of tuples: (identifier, (host, port)).
         NOTE: list index 0 corresponds to finger_table index 1
         """
-        pass
+        return [self.fingerTable[i][1] for i in range(self.m_bits)]
 
 class DHTNode(threading.Thread):
     """ DHT Node Agent. """
