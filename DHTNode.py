@@ -31,8 +31,6 @@ class FingerTable:
     def find(self, identification):
         """ Get node address of closest preceding node (in finger table) of identification. """
         index = self.getIdxFromId(identification)
-
-        print(self.fingerTable)
         return self.fingerTable[index-1][1][1]
         
 
@@ -51,7 +49,7 @@ class FingerTable:
         else:
             overlap_id = id + 2**self.m_bits
             idx = math.log2(overlap_id - self.node_id) + 1
-            
+
         return int(idx)
 
     def __repr__(self):
