@@ -20,7 +20,7 @@ class FingerTable:
 
     def fill(self, node_id, node_addr):
         """ Fill all entries of finger_table with node_id, node_addr."""
-        self.fingerTable = [(i, (node_id, node_addr)) for i, _ in self.fingerTable]
+        self.fingerTable = [(i, (node_id, node_addr)) for i in range(1, self.m_bits + 1)]
         pass
 
     def update(self, index, node_id, node_addr):
@@ -37,7 +37,13 @@ class FingerTable:
         pass
 
     def getIdxFromId(self, id):
-        idx = math.sqrt(id - self.node_id) + 1
+
+        if id > self.node_id: # key menor que o 2^m_bits - 1
+            idx = math.log2(id - self.node_id) + 1
+        else:
+            overlap_id = id + 2**self.m_bits
+            idx = math.log2(overlap_id - self.node_id) + 1
+
         return idx
 
     def __repr__(self):
