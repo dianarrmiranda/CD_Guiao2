@@ -15,23 +15,24 @@ class FingerTable:
         self.node_id = node_id
         self.node_addr = node_addr 
         self.m_bits = m_bits
-        self.fingerTable = []
+        self.fingerTable = [(node_id, node_addr) for i in range(1, self.m_bits + 1)]
         pass
 
     def fill(self, node_id, node_addr):
         """ Fill all entries of finger_table with node_id, node_addr."""
-        self.fingerTable = [(i, (node_id, node_addr)) for i in range(1, self.m_bits + 1)]
+        self.fingerTable = [(node_id, node_addr) for i in range(1, self.m_bits + 1)]
         pass
 
     def update(self, index, node_id, node_addr):
         """Update index of table with node_id and node_addr."""
-        self.fingerTable[index-1] = (index, (node_id, node_addr))
+        self.fingerTable[index-1] = (node_id, node_addr)
         pass
 
     def find(self, identification):
         """ Get node address of closest preceding node (in finger table) of identification. """
         index = self.getIdxFromId(identification)
-        return self.fingerTable[index-1][1][1]
+        print("find: ", self.fingerTable[index-1][1])
+        return self.fingerTable[index-1][1]
         
 
     def refresh(self):
@@ -60,7 +61,7 @@ class FingerTable:
         """return the finger table as a list of tuples: (identifier, (host, port)).
         NOTE: list index 0 corresponds to finger_table index 1
         """
-        return [self.fingerTable[i][1] for i in range(self.m_bits)]
+        return [self.fingerTable[i] for i in range(self.m_bits)]
 
 class DHTNode(threading.Thread):
     """ DHT Node Agent. """
@@ -92,7 +93,7 @@ class DHTNode(threading.Thread):
             self.predecessor_id = None
             self.predecessor_addr = None
 
-        self.finger_table = None    #TODO create finger_table
+        self.finger_table = FingerTable(self.identification, self.addr)    #TODO create finger_table
         self.keystore = {}  # Where all data is stored
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.settimeout(timeout)
@@ -128,6 +129,8 @@ class DHTNode(threading.Thread):
             self.successor_id = identification
             self.successor_addr = addr
             #TODO update finger table
+            #self.finger_table.update(self.finger_table.getIdxFromId(identification), identification, addr)
+            self.finger_table.fill(identification, addr)
             args = {"successor_id": self.identification, "successor_addr": self.addr}
             self.send(addr, {"method": "JOIN_REP", "args": args})
         elif contains(self.identification, self.successor_id, identification):
@@ -138,6 +141,8 @@ class DHTNode(threading.Thread):
             self.successor_id = identification
             self.successor_addr = addr
             #TODO update finger table
+            #self.finger_table.update(self.finger_table.getIdxFromId(identification), identification, addr)
+            self.finger_table.fill(identification, addr)
             self.send(addr, {"method": "JOIN_REP", "args": args})
         else:
             self.logger.debug("Find Successor(%d)", args["id"])
@@ -155,11 +160,17 @@ class DHTNode(threading.Thread):
         #TODO Implement processing of SUCCESSOR message
         id = args["id"]
         addr = args["from"]
-        if contains(self.predecessor_id, self.identification, id):
-            self.send(self.successor_addr, {"method": "SUCESSOR_REP", "args": {"id": id, "sucessor_id": self.successor_id, "sucessor_addr" : self.successor_addr}})
-        else:
-            self.send(self.successor_addr, {"method": "SUCESSOR", "args": {"req_id": id, "from": addr}})
-            
+
+        if(self.predecessor_id is not None):
+            if contains(self.predecessor_id, self.identification, id):
+                self.send(addr, {"method": "SUCESSOR_REP", "args": {"id": id, "sucessor_id": self.identification, "sucessor_addr" : self.addr}})
+            else:
+                self.send(self.finger_table.find(self.successor_id), {"method": "SUCESSOR", "args": {"req_id": id, "from": addr}})
+        else:        
+            if contains(self.identification, self.successor_id, id):
+                self.send(self.successor_addr, {"method": "SUCESSOR_REP", "args": {"id": id, "sucessor_id": self.successor_id, "sucessor_addr" : self.successor_addr}})
+            else:
+                self.send(self.finger_table.find(self.successor_id), {"method": "SUCESSOR", "args": {"req_id": id, "from": addr}})            
             
     def notify(self, args):
         """Process NOTIFY message.
@@ -194,12 +205,21 @@ class DHTNode(threading.Thread):
             self.successor_id = from_id
             self.successor_addr = addr
             #TODO update finger table
+            print("Update finger table: ", from_id)
+            print("getIdxFromId: ", self.finger_table.getIdxFromId(from_id))
+            self.finger_table.update(self.finger_table.getIdxFromId(from_id), from_id, addr)
 
         # notify successor of our existence, so it can update its predecessor record
         args = {"predecessor_id": self.identification, "predecessor_addr": self.addr}
         self.send(self.successor_addr, {"method": "NOTIFY", "args": args})
 
         # TODO refresh finger_table
+        res = self.finger_table.refresh()
+        for i in res:
+            print("Refresh finger table: ", i[1])
+            idx = self.finger_table.getIdxFromId(i[1])
+            self.finger_table.update(i[0], i[1], i[2])
+            self.send(self.finger_table.find(i[1]), {"method": "SUCESSOR", "args": {"req_id": i[1], "from": self.addr}})
 
     def put(self, key, value, address):
         """Store value in DHT.
@@ -213,13 +233,18 @@ class DHTNode(threading.Thread):
         self.logger.debug("Put: %s %s", key, key_hash)
 
         #TODO Replace next code:
-        if contains(self.identification, self.successor_id, key_hash):
-            #Coloca o valor na tabela
-            self.keystore[key] = value
-            #Envia o Acnowledge
-            self.send(address, {"method": "ACK"})
+        if self.predecessor_id is not None:
+            if contains(self.predecessor_id, self.identification, key_hash):
+                self.keystore[key] = value
+                self.send(address, {"method": "ACK"})
+            else:
+                self.send(self.successor_addr, {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
         else:
-            self.send(self.successor_addr, {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
+            if contains(self.identification, self.successor_id, key_hash):
+                self.keystore[key] = value
+                self.send(address, {"method": "ACK"})
+            else:
+                self.send(self.successor_addr, {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
         
         
         
@@ -236,16 +261,28 @@ class DHTNode(threading.Thread):
         #TODO Replace next code:
         #self.send(address, {"method": "NACK"})
 
-        if contains(self.identification, self.successor_id, key_hash):
-            if key in self.keystore:
-                #Vai buscar o valor à tabela
-                value = self.keystore.get(key)
-                #Verifica se o valor existe e envia o Acnowledge
-                self.send(address, {"method": "ACK", "args": value})
+        if(self.predecessor_id is not None):
+            if contains(self.predecessor_id, self.identification, key_hash):
+                if key in self.keystore:
+                    #Vai buscar o valor à tabela
+                    value = self.keystore.get(key)
+                    #Verifica se o valor existe e envia o Acnowledge
+                    self.send(address, {"method": "ACK", "args": value})
+                else:
+                    self.send(address, {"method": "NACK"})
             else:
-                self.send(address, {"method": "NACK"})
+                self.send(self.successor_addr, {"method": "GET", "args": {"key": key, "from": address}})
         else:
-            self.send(self.successor_addr, {"method": "GET", "args": {"key": key, "from": address}})
+            if contains(self.identification, self.successor_id, key_hash):
+                if key in self.keystore:
+                    #Vai buscar o valor à tabela
+                    value = self.keystore.get(key)
+                    #Verifica se o valor existe e envia o Acnowledge
+                    self.send(address, {"method": "ACK", "args": value})
+                else:
+                    self.send(address, {"method": "NACK"})
+            else:
+                self.send(self.successor_addr, {"method": "GET", "args": {"key": key, "from": address}})
 
 
     def run(self):
@@ -267,6 +304,10 @@ class DHTNode(threading.Thread):
                     self.successor_id = args["successor_id"]
                     self.successor_addr = args["successor_addr"]
                     #TODO fill finger table
+                    print("FILL FINGER TABLE")
+                    print("indentification: ", self.identification)
+                    print("self.successor_id: ", self.successor_id)
+                    self.finger_table.fill(self.successor_id, self.successor_addr)
                     self.inside_dht = True
                     self.logger.info(self)
 
@@ -300,6 +341,11 @@ class DHTNode(threading.Thread):
                     self.stabilize(output["args"], addr)
                 elif output["method"] == "SUCCESSOR_REP":
                     #TODO Implement processing of SUCCESSOR_REP
+                    req_id = output["args"]["req_id"]
+                    suc_id = output["args"]["successor_id"]
+                    suc_addr = output["args"]["successor_addr"]
+                    idx = self.finger_table.getIdxFromId(req_id)
+                    self.finger_table.update(idx, suc_id, suc_addr)
                     pass
             else:  # timeout occurred, lets run the stabilize algorithm
                 # Ask successor for predecessor, to start the stabilize process
