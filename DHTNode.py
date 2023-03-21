@@ -30,17 +30,17 @@ class FingerTable:
 
     def find(self, identification):
         """ Get node address of closest preceding node (in finger table) of identification. """
-        index = self.getIdxFromId(identification)
-        #print("find: ", self.fingerTable[index-1][1])
-        return self.fingerTable[index-1][1]
+        for i in range(self.m_bits-1, -1, -1):
+            if contains(self.fingerTable[i][0], self.node_id, identification):
+                return self.fingerTable[i][1]
+        return self.fingerTable[0][1]
         
 
     def refresh(self):
         """ Retrieve finger table entries requiring refresh."""
         res = []
         for i in range(self.m_bits):
-            node_addr = self.find(self.node_id + 2**i)
-            res.append((i+1, (self.node_id + 2**i) % 2**self.m_bits, node_addr))
+            res.append((i+1, (self.node_id + 2**i) % 2**self.m_bits, self.fingerTable[i][1]))
         return res
 
 
@@ -61,7 +61,7 @@ class FingerTable:
         """return the finger table as a list of tuples: (identifier, (host, port)).
         NOTE: list index 0 corresponds to finger_table index 1
         """
-        return [self.fingerTable[i] for i in range(self.m_bits)]
+        return self.fingerTable
 
 class DHTNode(threading.Thread):
     """ DHT Node Agent. """
@@ -231,13 +231,13 @@ class DHTNode(threading.Thread):
                 self.keystore[key] = value
                 self.send(address, {"method": "ACK"})
             else:
-                self.send(self.successor_addr, {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
+                self.send(self.finger_table.find(key_hash), {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
         else:
             if contains(self.identification, self.successor_id, key_hash):
                 self.keystore[key] = value
                 self.send(address, {"method": "ACK"})
             else:
-                self.send(self.successor_addr, {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
+                self.send(self.finger_table.find(key_hash), {"method": "PUT", "args": {"key": key, "value": value, "from": address}})
         
         
         
@@ -264,7 +264,7 @@ class DHTNode(threading.Thread):
                 else:
                     self.send(address, {"method": "NACK"})
             else:
-                self.send(self.successor_addr, {"method": "GET", "args": {"key": key, "from": address}})
+                self.send(self.finger_table.find(key_hash), {"method": "GET", "args": {"key": key, "from": address}})
         else:
             if contains(self.identification, self.successor_id, key_hash):
                 if key in self.keystore:
@@ -275,7 +275,7 @@ class DHTNode(threading.Thread):
                 else:
                     self.send(address, {"method": "NACK"})
             else:
-                self.send(self.successor_addr, {"method": "GET", "args": {"key": key, "from": address}})
+                self.send(self.finger_table.find(key_hash), {"method": "GET", "args": {"key": key, "from": address}})
 
 
     def run(self):
