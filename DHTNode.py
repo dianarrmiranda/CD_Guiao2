@@ -15,7 +15,7 @@ class FingerTable:
         self.node_id = node_id
         self.node_addr = node_addr 
         self.m_bits = m_bits
-        self.fingerTable = [(node_id, node_addr) for i in range(1, self.m_bits + 1)]
+        self.fingerTable = []
         pass
 
     def fill(self, node_id, node_addr):
